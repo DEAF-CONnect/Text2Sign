@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-LLM 전처리 → {"tokens":[{"gloss":"...","seconds":...},...]} plan.json 생성
+LLM 전처리 → {"tokens":[{"gloss":".","seconds":.},]} plan.json 생성
 (옵션) generator를 --plan_json 으로 이어서 최종 JSONL까지 출력
 
 요구:
@@ -12,11 +12,16 @@ LLM 전처리 → {"tokens":[{"gloss":"...","seconds":...},...]} plan.json 생�
     (미구현이면 이 스크립트로 plan만 만들고, generator는 기존 방식으로 텍스트 입력 사용)
 
 사용 예:
-  # 1) 계획만 만들기
+  # 1) 계획만 만들기 (디렉토리 스캔 기반)
   python llm_preprocessor.py --templates_root "data/templates_crowd_v2" \
       --text "오늘 공연 와줘서 감사합니다" --out_plan "out/plan.json"
 
-  # 2) 계획 만들고 곧바로 generator 실행(권장)
+  # 2) manifest 기반으로 AllowedGlosses 사용
+  python llm_preprocessor.py --templates_root "data/templates_crowd_v3" \
+      --manifest_json "manifest_crowd_v3.json" \
+      --text "오늘 공연 와줘서 감사합니다" --out_plan "out/plan.json"
+
+  # 3) 계획 만들고 곧바로 generator 실행(권장)
   python llm_preprocessor.py --templates_root "data/templates_crowd_v2" \
       --text "오늘 공연 와줘서 감사합니다" --out_plan "out/plan.json" \
       --generate --generator_path "text2sign_retrieval_full.py" \
@@ -51,10 +56,49 @@ def build_allowed_glosses(templates_root: str) -> List[str]:
                     pass
     return sorted(gls)
 
+
+def build_allowed_glosses_from_manifest(manifest_path: str) -> List[str]:
+    """
+    manifest_crowd_v3.json 처럼 meta/index 구조를 가진 manifest에서
+    사용 가능한 글로스 목록을 뽑아 AllowedGlosses 로 사용한다.
+
+    지원 형태:
+      - {"meta": {...}, "index": { "<gloss>": {...}, ... }}
+      - 또는 {"<gloss>": {...}, ...} 처럼 바로 매핑된 형태
+    """
+    p = Path(manifest_path)
+    if not p.exists():
+        raise RuntimeError(f"manifest 파일을 찾을 수 없습니다: {manifest_path}")
+
+    with p.open("r", encoding="utf-8") as f:
+        mani = json.load(f)
+
+    # manifest_crowd_v3.json 구조 (meta + index) 지원 :contentReference[oaicite:0]{index=0}
+    if isinstance(mani, dict) and "index" in mani:
+        index = mani.get("index", {})
+    else:
+        # 이미 gloss → entry 매핑 구조인 경우
+        index = mani
+
+    if not isinstance(index, dict):
+        raise RuntimeError(f"manifest 형식을 이해할 수 없습니다: {manifest_path}")
+
+    glosses = sorted(index.keys())
+    if not glosses:
+        raise RuntimeError(f"manifest에서 글로스를 찾지 못했습니다: {manifest_path}")
+
+    return glosses
+
 # ----------------------------
 # OpenRouter LLM 호출 (OpenAI SDK 호환)
 # ----------------------------
-def call_llm_make_plan(text: str, allowed: List[str], model: str = "openrouter/auto", temperature: float = 0.1, max_tokens: int = 512) -> Dict[str, Any]:
+def call_llm_make_plan(
+    text: str,
+    allowed: List[str],
+    model: str = "openrouter/auto",
+    temperature: float = 0.1,
+    max_tokens: int = 512
+) -> Dict[str, Any]:
     from openai import OpenAI
     api_key = os.getenv("OPENROUTER_API_KEY")
     if not api_key:
@@ -156,8 +200,16 @@ def write_plan(plan: Dict[str, Any], out_path: str):
         json.dump(plan, f, ensure_ascii=False)
     print(f"✅ plan.json 저장: {out_path}")
 
-def run_generator_with_plan(generator_path: str, templates_root: str, plan_json: str,
-                            out_jsonl: str, fps: int, fade_frames: int, gap_frames: int, pick: str):
+def run_generator_with_plan(
+    generator_path: str,
+    templates_root: str,
+    plan_json: str,
+    out_jsonl: str,
+    fps: int,
+    fade_frames: int,
+    gap_frames: int,
+    pick: str
+):
     cmd = [
         "python", generator_path,
         "--templates_root", templates_root,
@@ -166,7 +218,7 @@ def run_generator_with_plan(generator_path: str, templates_root: str, plan_json:
         "--fps", str(fps),
         "--fade_frames", str(fade_frames),
         "--gap_frames", str(gap_frames),
-        "--pick", pick
+        "--pick", pick,
     ]
     print("▶ 실행:", " ".join(cmd))
     subprocess.check_call(cmd)
@@ -184,6 +236,12 @@ def main():
     ap.add_argument("--temperature", type=float, default=0.1)
     ap.add_argument("--max_tokens", type=int, default=512)
 
+    # manifest 기반 AllowedGlosses (옵션)
+    ap.add_argument(
+        "--manifest_json",
+        help="manifest_crowd_v3.json 같은 템플릿 인덱스 JSON. 주어지면 templates_root 디렉토리 스캔 대신 여기의 글로스 목록만 AllowedGlosses로 사용."
+    )
+
     # generator 연동(옵션)
     ap.add_argument("--generate", action="store_true", help="계획 생성 후 generator 실행")
     ap.add_argument("--generator_path", default="text2sign_retrieval_full.py")
@@ -195,13 +253,26 @@ def main():
 
     args = ap.parse_args()
 
-    # 1) 허용 글로스 수집
-    allowed = build_allowed_glosses(args.templates_root)
+    # 1) 허용 글로스 수집: manifest 우선, 없으면 디렉토리 스캔 
+    if args.manifest_json:
+        allowed = build_allowed_glosses_from_manifest(args.manifest_json)
+    else:
+        allowed = build_allowed_glosses(args.templates_root)
+
     if not allowed:
-        raise RuntimeError(f"템플릿이 비어있습니다: {args.templates_root}")
+        if args.manifest_json:
+            raise RuntimeError(f"manifest에 글로스가 없습니다: {args.manifest_json}")
+        else:
+            raise RuntimeError(f"템플릿이 비어있습니다: {args.templates_root}")
 
     # 2) LLM 호출 → plan 초안
-    raw_plan = call_llm_make_plan(args.text, allowed, model=args.model, temperature=args.temperature, max_tokens=args.max_tokens)
+    raw_plan = call_llm_make_plan(
+        args.text,
+        allowed,
+        model=args.model,
+        temperature=args.temperature,
+        max_tokens=args.max_tokens,
+    )
 
     # 3) 서버단 정규화
     plan = sanitize_plan(raw_plan, allowed)
@@ -216,7 +287,10 @@ def main():
             templates_root=args.templates_root,
             plan_json=args.out_plan,
             out_jsonl=args.out_jsonl,
-            fps=args.fps, fade_frames=args.fade_frames, gap_frames=args.gap_frames, pick=args.pick
+            fps=args.fps,
+            fade_frames=args.fade_frames,
+            gap_frames=args.gap_frames,
+            pick=args.pick,
         )
 
 if __name__ == "__main__":
