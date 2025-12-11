@@ -82,26 +82,26 @@ FUNCTION_GLOSSES: Set[str] = PARTICLE_GLOSSES | ENDING_GLOSSES
 MANIFEST_CONFIG: List[Dict[str, str]] = [
     {
         "manifest": os.getenv(
-            "MANIFEST_CROWD", "/mnt/text2sign/home/ubuntu/manifest_crowd_v3_small.json"
+            "MANIFEST_CROWD", "/YOUR_SERVER_PATH/manifest_crowd_v3_small.json"
         ),
         "root": os.getenv(
-            "ROOT_CROWD", "/mnt/text2sign/home/ubuntu/data/templates_crowd_v3"
+            "ROOT_CROWD", "/YOUR_SERVER_PATH/data/templates_crowd_v3"
         ),
     },
     {
         "manifest": os.getenv(
-            "MANIFEST_REALSEN", "/mnt/text2sign/home/ubuntu/manifest_realsen_v3_small.json"
+            "MANIFEST_REALSEN", "/YOUR_SERVER_PATH/manifest_realsen_v3_small.json"
         ),
         "root": os.getenv(
-            "ROOT_REALSEN", "/mnt/text2sign/home/ubuntu/data/templates_realsen_v3"
+            "ROOT_REALSEN", "/YOUR_SERVER_PATH/data/templates_realsen_v3"
         ),
     },
     {
         "manifest": os.getenv(
-            "MANIFEST_REALWORD", "/mnt/text2sign/home/ubuntu/manifest_realword_v3_small.json"
+            "MANIFEST_REALWORD", "/YOUR_SERVER_PATH/manifest_realword_v3_small.json"
         ),
         "root": os.getenv(
-            "ROOT_REALWORD", "/mnt/text2sign/home/ubuntu/data/templates_realword_v3"
+            "ROOT_REALWORD", "/YOUR_SERVER_PATH/data/templates_realword_v3"
         ),
     },
 ]
