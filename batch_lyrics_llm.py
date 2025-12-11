@@ -8,9 +8,9 @@ from llm_preprocessor import (
     sanitize_plan,
 )
 
-TEMPLATES_ROOT = "C:/Users/zzznxeoneee/Desktop/Text2Sign/data/templates_crowd_v3"
-MANIFEST_JSON  = "C:/Users/zzznxeoneee/Desktop/Text2Sign/manifest_crowd_v3.json"
-LYRICS_PATH    = "C:/Users/zzznxeoneee/Desktop/Text2Sign/lyrics.txt"
+TEMPLATES_ROOT = "C:/Users/YOUR_USERNAME/Desktop/Text2Sign/data/templates_crowd_v3"
+MANIFEST_JSON  = "C:/Users/YOUR_USERNAME/Desktop/Text2Sign/manifest_crowd_v3.json"
+LYRICS_PATH    = "C:/Users/YOUR_USERNAME/Desktop/Text2Sign/lyrics.txt"
 OUT_DIR        = Path("plans_lyrics")
 
 MAX_RETRY_PER_LINE = 3  # 한 줄당 최대 재시도 횟수
