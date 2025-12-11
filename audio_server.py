@@ -10,7 +10,7 @@ import websockets
 from rnnoise_stream import RnnoiseStream
 from audio_webm_encoder import pcm_bytes_to_webm_bytes  # ★ WebM(Opus) 인코더
 
-STT_WS_URL = "ws://3.35.41.240:8080/ws/audio"
+STT_WS_URL = "ws://YOUR/EC2IP"
 
 
 async def send_to_stt_ws(webm_bytes: bytes) -> dict:
